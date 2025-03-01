@@ -13,6 +13,13 @@ interface CacheEntry {
   timestamp: number;
 }
 
+/**
+ * Claude Service with LangSmith Threads Integration
+ * 
+ * Thread ID Implementation:
+ * - Thread ID format: user-${userId}
+ * - All API calls with the same userId are grouped in the same thread
+ */
 export class ClaudeService {
   private client: Anthropic;
   private readonly MODEL_NAME = "claude-3-7-sonnet-20250219"; // Updated to use the latest model
@@ -36,6 +43,9 @@ export class ClaudeService {
     this.client = new Anthropic({
       apiKey: process.env.CLAUDE_API_KEY,
     });
+    
+    // Set LangSmith threads globally
+    process.env.LANGCHAIN_THREADS = "true";
 
     // Initialize LangChain integration
     try {
