@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    // Specify ECMAScript target version
+    "target": "es2020",        // This lets us use modern JavaScript features
+    
+    // Module system to use
+    "module": "commonjs",      // Best for Node.js applications
+    
+    // Specify library files to include
+    "lib": ["es2020"],        // Includes definitions for ES2020 features
+    
+    // Output directory for compiled files
+    "outDir": "./dist",       // All compiled JavaScript will go here
+    
+    // Source directory
+    "rootDir": "./src",       // Where to find your TypeScript files
+    
+    // Enable all strict type checking options
+    "strict": true,           // Catches more potential errors
+    
+    // Module resolution strategy
+    "moduleResolution": "node",// How to find imported modules
+    
+    // Enable JSON imports
+    "resolveJsonModule": true, // Allows importing JSON files
+    
+    // Generate source maps for debugging
+    "sourceMap": true,        // Helps with debugging
+    
+    // Allow default imports from modules
+    "esModuleInterop": true,  // Better compatibility with modules
+    
+    // Skip type checking of declaration files
+    "skipLibCheck": true,     // Faster builds
+    
+    // Ensure consistent casing in file names
+    "forceConsistentCasingInFileNames": true,
+    
+    // Base URL for module resolution
+    "baseUrl": ".",           // Root directory for paths
+    
+    // Path mapping for module aliases
+    "paths": {
+      "@/*": ["src/*"]        // Allows imports using @ to refer to src directory
+    }
+  },
+  // Which files to include in compilation
+  "include": ["src/**/*"],
+  
+  // Which files to exclude from compilation
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}
