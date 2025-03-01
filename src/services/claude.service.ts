@@ -574,10 +574,13 @@ Remember: ONLY provide the translation in {destinationLang}, nothing else.`;
     // Try using LangChain first if available
     if (this.langchainClient) {
       try {
+        // Log userId for debugging
+        console.log(`[THREAD DEBUG] Calling runWithLangChain with userId: ${userId}`);
+        
         const result = await this.runWithLangChain(
           "generateSearchTerms",
           promptTemplate,
-          { text, userId },
+          { text, userId }, // Make sure userId is passed correctly
         );
 
         const terms = result.split(",").map((term) => term.trim());

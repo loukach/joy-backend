@@ -26,19 +26,30 @@ router.post('/test-thread', async (req: Request, res: Response) => {
         
         console.log(`[THREAD DEBUG] Test endpoint called with userId: "${userId}"`);
         
+        // Set LangSmith thread ID directly using environment variables
+        if (userId) {
+            process.env.LANGCHAIN_SESSION_ID = `user-${userId}`;
+            process.env.LANGCHAIN_TRACING_THREAD_ID = `user-${userId}`;
+            console.log(`[THREAD DEBUG] Manually set thread ID environment variables to user-${userId}`);
+        }
+        
         // Import claude service directly in this function scope
         const claudeService = require('../services/claude.service').default;
         
         // Simple test of the Claude service with thread ID
+        console.log(`[THREAD DEBUG] Calling translateToEnglish with userId: ${userId}`);
         const result = await claudeService.translateToEnglish(
             'Testing thread with userId: ' + userId,
             userId
         );
         
+        console.log(`[THREAD DEBUG] Test successful. Trace should be in thread: user-${userId}`);
+        
         res.json({ 
             success: true, 
             result,
             userId,
+            threadId: `user-${userId}`,
             message: "Check the logs and LangSmith dashboard for thread details" 
         });
     } catch (error) {
