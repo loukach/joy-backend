@@ -1,124 +1,93 @@
-# Joy Volunteer Matching Backend
+# Joy Backend
 
-Backend service for the Joy volunteering platform that matches volunteers with opportunities.
-
-## Features
-
-- Volunteer matching using Claude AI
-- Multilingual support with translation
-- Conversation history tracking
-- Task management and search
-- LLM observability with LangSmith
+Backend service for Joy, a volunteer matching chatbot.
 
 ## Setup
 
-### Prerequisites
-
-- Node.js 18+
-- MongoDB
-- Anthropic API key
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Copy `.env.example` to `.env` and configure your environment variables
-4. Start the development server: `npm run dev`
-
-## Testing the Chatbot
-
-### 1. Integration Test
-
-Run the automated test:
+1. Install dependencies:
+```bash
+npm install
 ```
+
+2. Create a `.env` file:
+```bash
+cp .env.example .env
+```
+
+3. Update the environment variables in the `.env` file.
+
+## Development
+
+Start the development server:
+```bash
+npm run dev
+```
+
+## Production
+
+Build the project:
+```bash
+npm run build
+```
+
+Start the production server:
+```bash
+npm start
+```
+
+## Deployment to Render
+
+### Manual Deployment
+
+1. Create a new Web Service on Render
+2. Connect your repository
+3. Configure the following settings:
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
+   - Environment: `Node`
+   - Region: (Choose closest to your users)
+   - Branch: `main` (or your production branch)
+
+4. Add the following environment variables:
+   - `NODE_ENV`: `production`
+   - `MONGODB_URI`: Your MongoDB connection string
+   - `CLAUDE_API_KEY`: Your Anthropic Claude API key
+   - `LANGSMITH_API_KEY`: Your LangSmith API key
+   - `LANGSMITH_PROJECT`: `joy-volunteer-matching`
+   - `LANGCHAIN_TRACING_V2`: `true`
+
+### Blueprint Deployment
+
+Alternatively, you can use the Render YAML blueprint:
+
+1. Push the `render.yaml` file to your repository
+2. Go to the Render Dashboard and select "Blueprint" from the navigation
+3. Select your repository and follow the prompts
+
+## Testing
+
+Run all tests:
+```bash
+npm test
+```
+
+Run unit tests:
+```bash
+npm run test:unit
+```
+
+Run integration tests:
+```bash
 npm run test:integration
 ```
 
-### 2. Command Line Interface
+## API Documentation
 
-Use the CLI client to interact with the chatbot:
+See the Postman collection for API documentation:
+```bash
+JoyFromGiving-API.postman_collection.json
 ```
-node scripts/chat-cli.js
-```
-
-### 3. Simple API Test with curl
-
-Test the API with a simple curl command:
-```
-chmod +x scripts/test-api.sh
-./scripts/test-api.sh
-```
-Note: Make sure `jq` is installed (e.g., `apt install jq` on Ubuntu).
-
-### 4. Web Interface
-
-1. Start the server:
-   ```
-   npm start
-   ```
-
-2. Open the test page in your browser:
-   ```
-   open scripts/test-page.html
-   ```
-   or simply open the file in your browser.
-
-### 5. Using Mock Service for Testing
-
-For testing without using the real Claude API (no API key needed):
-
-1. Edit `src/services/matching.service.ts` to import the mock service:
-   ```typescript
-   // import claudeService from './claude.service';
-   import claudeService from './claude.service.mock';
-   ```
-2. Rebuild and restart the server.
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| PORT | Server port | Yes |
-| MONGODB_URI | MongoDB connection string | Yes |
-| CLAUDE_API_KEY | Anthropic Claude API key | Yes |
-| LANGSMITH_API_KEY | LangSmith API key for LLM observability | No |
-| LANGSMITH_PROJECT | LangSmith project name | No |
-| LANGCHAIN_TRACING_V2 | Enable LangChain tracing | No |
-
-## LangSmith Integration
-
-This project uses LangSmith to monitor and debug Claude API calls. To enable LangSmith:
-
-1. Create an account at [LangSmith](https://smith.langchain.com/)
-2. Create a new project in LangSmith
-3. Add your LangSmith API key to your `.env` file
-4. Set `LANGSMITH_PROJECT` to your project name
-5. Set `LANGCHAIN_TRACING_V2=true`
-
-LangSmith will track:
-- All Claude API calls
-- Input and output data
-- Cache hits
-- Errors
-- Latency
-- User IDs (if provided)
-
-## API Endpoints
-
-### Conversations
-
-- `POST /api/conversation` - Process a new message
-- `GET /api/conversation/:id` - Get a conversation by ID
-- `GET /api/conversation/user/:userId` - Get all conversations for a user
-
-### Tasks
-
-- `GET /api/tasks` - Get all volunteer tasks
-- `GET /api/tasks/:id` - Get a specific task
-- `POST /api/tasks` - Create a new task
-- `PUT /api/tasks/:id` - Update a task
-- `DELETE /api/tasks/:id` - Delete a task
 
 ## License
 
-MIT
+ISC

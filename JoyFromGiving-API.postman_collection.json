@@ -1,0 +1,88 @@
+{
+  "info": {
+    "name": "JoyFromGiving API",
+    "description": "API endpoints for the JoyFromGiving application",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Chatbot",
+      "item": [
+        {
+          "name": "Get Recommendations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"I want to volunteer with children\",\n  \"language\": \"en\",\n  \"userId\": \"user123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/recommend",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "recommend"]
+            },
+            "description": "Get volunteer opportunity recommendations based on user input"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversations",
+      "item": [
+        {
+          "name": "Get Conversation by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/conversations/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "conversations", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "conversation123",
+                  "description": "Conversation ID"
+                }
+              ]
+            },
+            "description": "Retrieve a specific conversation by its ID"
+          }
+        },
+        {
+          "name": "Get User Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/:userId/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", ":userId", "conversations"],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "user123",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Retrieve all conversations for a specific user"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ]
+}
