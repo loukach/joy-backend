@@ -405,7 +405,7 @@ Remember: ONLY provide the English translation, nothing else.`;
         const result = await this.runWithLangChain(
           "translateToEnglish",
           promptTemplate,
-          { text },
+          { text, userId }, // Include userId in promptVariables
         );
 
         this.setCachedResponse(cacheKey, result);
@@ -502,7 +502,7 @@ Remember: ONLY provide the translation in {destinationLang}, nothing else.`;
         const result = await this.runWithLangChain(
           "translate",
           promptTemplate,
-          { text, sourceLang, destinationLang },
+          { text, sourceLang, destinationLang, userId },
         );
 
         this.setCachedResponse(cacheKey, result);
@@ -577,7 +577,7 @@ Remember: ONLY provide the translation in {destinationLang}, nothing else.`;
         const result = await this.runWithLangChain(
           "generateSearchTerms",
           promptTemplate,
-          { text },
+          { text, userId },
         );
 
         const terms = result.split(",").map((term) => term.trim());
