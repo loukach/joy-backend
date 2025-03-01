@@ -725,7 +725,51 @@ Remember: ONLY provide the translation in {destinationLang}, nothing else.`;
       location: task.location,
     }));
 
-    const prompt = `As a volunteer coordinator, recommend these volunteering opportunities based on the message: "${message}"
+    const promptTemplate = `As a volunteer coordinator, recommend these volunteering opportunities based on the message: "{message}"
+    
+Available opportunities (showing top 3):
+{tasksJson}
+
+Provide a brief, natural response that:
+1. Acknowledges their interests
+2. Lists the top 2-3 opportunities and why they match
+3. Asks 1 follow-up question
+
+Keep your response concise but friendly.`;
+
+    // Try using LangChain first if available
+    if (this.langchainClient) {
+      try {
+        const tasksJson = JSON.stringify(compactTasksJson, null, 2);
+        
+        const result = await this.runWithLangChain(
+          "generateRecommendationResponse",
+          promptTemplate,
+          { message, tasksJson, userId }, // Include userId in promptVariables
+        );
+
+        this.setCachedResponse(cacheKey, result);
+        // Also cache the message intent for partial matching
+        this.setCachedResponse(messageOnlyCacheKey, result);
+        return result;
+      } catch (error) {
+        console.error(
+          "LangChain recommendation generation failed, falling back to direct API:",
+          error,
+        );
+        // Fall through to direct API call
+      }
+    }
+
+    // Fallback to direct Claude API
+    return this.trackWithLangSmith(
+      "generateRecommendationResponse",
+      { message, tasks: simplifiedTasks, userId, model: this.FAST_MODEL },
+      async () => {
+        // Generate a threadId for LangSmith if we have a userId
+        const threadId = userId !== "anonymous" ? `user-${userId}` : undefined;
+        
+        const prompt = `As a volunteer coordinator, recommend these volunteering opportunities based on the message: "${message}"
     
 Available opportunities (showing top 3):
 ${JSON.stringify(compactTasksJson, null, 2)}
@@ -736,13 +780,6 @@ Provide a brief, natural response that:
 3. Asks 1 follow-up question
 
 Keep your response concise but friendly.`;
-
-    return this.trackWithLangSmith(
-      "generateRecommendationResponse",
-      { message, tasks: simplifiedTasks, userId, model: this.FAST_MODEL },
-      async () => {
-        // Generate a threadId for LangSmith if we have a userId
-        const threadId = userId !== "anonymous" ? `user-${userId}` : undefined;
         
         const response = await this.client.messages.create({
           model: this.FAST_MODEL, // Use faster model for recommendations
@@ -788,7 +825,7 @@ Keep your response concise but friendly.`;
       `❓ Generating no matches response for: "${message.substring(0, 30)}..."`,
     );
 
-    const prompt = `As a volunteer coordinator, I need to respond to this volunteer request: "${message}"
+    const promptTemplate = `As a volunteer coordinator, I need to respond to this volunteer request: "{message}"
 
 Unfortunately, I couldn't find any exact matches for their interests. Please provide a helpful response that:
 
@@ -803,12 +840,48 @@ Unfortunately, I couldn't find any exact matches for their interests. Please pro
 
 Make the response conversational and natural, focused on gathering more information to help find the right opportunity.`;
 
+    // Try using LangChain first if available
+    if (this.langchainClient) {
+      try {
+        const result = await this.runWithLangChain(
+          "generateNoMatchesResponse",
+          promptTemplate,
+          { message, userId }, // Include userId in promptVariables
+        );
+
+        this.setCachedResponse(cacheKey, result);
+        return result;
+      } catch (error) {
+        console.error(
+          "LangChain no-matches response generation failed, falling back to direct API:",
+          error,
+        );
+        // Fall through to direct API call
+      }
+    }
+
+    // Fallback to direct Claude API
     return this.trackWithLangSmith(
       "generateNoMatchesResponse",
       { message, userId, model: this.FAST_MODEL },
       async () => {
         // Generate a threadId for LangSmith if we have a userId
         const threadId = userId !== "anonymous" ? `user-${userId}` : undefined;
+        
+        const prompt = `As a volunteer coordinator, I need to respond to this volunteer request: "${message}"
+
+Unfortunately, I couldn't find any exact matches for their interests. Please provide a helpful response that:
+
+1. Warmly acknowledges their specific interests and motivation to volunteer
+2. Asks ONE targeted follow-up questions about either:
+   - Their specific skills or experience
+   - or Preferred time commitment (weekdays, weekends, evenings)
+   - or Geographic area or travel preferences
+   - or Types of organizations they'd like to work with
+3. Maintains an encouraging and supportive tone
+4. Keep it concise.
+
+Make the response conversational and natural, focused on gathering more information to help find the right opportunity.`;
         
         const response = await this.client.messages.create({
           model: this.FAST_MODEL, // Use faster model for these simple responses
@@ -853,7 +926,7 @@ Make the response conversational and natural, focused on gathering more informat
       `🔍 Analyzing message for missing info: "${message.substring(0, 30)}..."`,
     );
 
-    const prompt = `Analyze this volunteer request: "${message}"
+    const promptTemplate = `Analyze this volunteer request: "{message}"
 
 Identify what key information is missing that would help match them with opportunities. Consider:
 - Skills and experience
@@ -865,10 +938,44 @@ Identify what key information is missing that would help match them with opportu
 
 Return only a comma-separated list of the most important missing pieces of information.`;
 
+    // Try using LangChain first if available
+    if (this.langchainClient) {
+      try {
+        const result = await this.runWithLangChain(
+          "analyzeMessageForMissingInfo",
+          promptTemplate,
+          { message, userId }, // Include userId in promptVariables
+        );
+
+        const missingInfo = result.split(",").map((info) => info.trim());
+        this.setCachedResponse(cacheKey, JSON.stringify(missingInfo));
+        return missingInfo;
+      } catch (error) {
+        console.error(
+          "LangChain missing info analysis failed, falling back to direct API:",
+          error,
+        );
+        // Fall through to direct API call
+      }
+    }
+
+    // Fallback to direct Claude API
     return this.trackWithLangSmith(
       "analyzeMessageForMissingInfo",
       { message, userId, model: this.FAST_MODEL },
       async () => {
+        const prompt = `Analyze this volunteer request: "${message}"
+
+Identify what key information is missing that would help match them with opportunities. Consider:
+- Skills and experience
+- Time availability
+- Location preferences
+- Preferred cause areas
+- Type of work they want to do
+- Target beneficiary groups they want to help
+
+Return only a comma-separated list of the most important missing pieces of information.`;
+
         const response = await this.client.messages.create({
           model: this.FAST_MODEL, // Use faster model
           max_tokens: 400, // Reduced token limit for faster generation
