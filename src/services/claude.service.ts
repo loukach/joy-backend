@@ -65,12 +65,15 @@ export class ClaudeService {
     // Initialize LangSmith using LangChain's automatic tracing
     if (process.env.LANGSMITH_API_KEY) {
       try {
-        // Always set up these environment variables for LangChain's tracing
+        // Set up LangSmith environment variables
         process.env.LANGCHAIN_PROJECT =
           process.env.LANGCHAIN_PROJECT ||
           config.langsmithProject ||
           "joy-volunteer-matching";
         process.env.LANGCHAIN_TRACING_V2 = "true";
+        
+        // Enable thread grouping
+        process.env.LANGCHAIN_THREADS = "true";
 
         // We don't need to use the LangSmith client directly when using LangChain
         // Just initialize it to confirm connectivity
@@ -207,22 +210,33 @@ export class ClaudeService {
     console.log(`🧹 Pruned ${entriesToRemove} old entries from Claude cache`);
   }
 
-  // Create a LangSmith run and track the Claude API call
+  /**
+   * Create a LangSmith run and track the Claude API call
+   * 
+   * Thread ID Implementation:
+   * - If a userId is provided, we set a thread ID in the format: user-${userId}
+   * - This thread ID groups all related traces in LangSmith
+   * - We use process.env.LANGCHAIN_SESSION_ID to set the thread ID
+   * - The thread ID is cleaned up after each run to avoid conflicts
+   */
   private async trackWithLangSmith<T>(
     functionName: string,
     inputs: Record<string, any>,
     runFn: () => Promise<T>,
   ): Promise<T> {
     // Always log what we're doing
-    const userId = inputs.userId || "anonymous";
     const runName = `${functionName}-${new Date().toISOString()}`;
     const startTime = Date.now();
+    
+    // If we have a userId, set it as the session ID for thread tracking
+    const userId = inputs.userId;
+    if (userId && userId !== "anonymous") {
+      process.env.LANGCHAIN_SESSION_ID = `user-${userId}`;
+    }
 
     // Debug log
     if (this.langsmith) {
-      console.log(
-        `🔍 Tracking run '${runName}' for user ${userId} via LangSmith`,
-      );
+      console.log(`🔍 Tracking run '${runName}'${userId ? ` for user ${userId}` : ''} via LangSmith`);
     }
 
     try {
@@ -237,10 +251,23 @@ export class ClaudeService {
       // Record failed run
       this.logRunToConsole(functionName, inputs, null, startTime, false, error);
       throw error;
+    } finally {
+      // Clean up if we set a thread ID based on userId
+      if (userId && userId !== "anonymous") {
+        delete process.env.LANGCHAIN_SESSION_ID;
+      }
     }
   }
 
-  // Run with LangChain and track the Claude API call
+  /**
+   * Run with LangChain and track the Claude API call
+   * 
+   * Thread ID Implementation:
+   * - If a userId is provided, we set a thread ID in the format: user-${userId}
+   * - This thread ID groups all related traces in LangSmith
+   * - We include the thread ID in both environment variables and metadata
+   * - The thread ID is cleaned up after each run
+   */
   private async runWithLangChain(
     functionName: string,
     promptTemplate: string,
@@ -262,24 +289,38 @@ export class ClaudeService {
       const startTime = Date.now();
       console.log(`🔄 Running ${functionName} with LangChain`);
 
-      // Use runName attribute and metadata to improve LangSmith visibility
-      const result = await chain.invoke(promptVariables, {
-        runName: `JoyBot-${functionName}`,
-        tags: ["joy-volunteer-matching", functionName],
-        // Additional metadata for the specific invocation
-        metadata: {
-          userId: promptVariables.userId || 'anonymous',
-          function: functionName,
-          inputSize: JSON.stringify(promptVariables).length
+      // Get userId from prompt variables and use it for thread tracking
+      const userId = promptVariables.userId;
+      let threadId = undefined;
+      
+      if (userId && userId !== "anonymous") {
+        threadId = `user-${userId}`;
+        // Set the session ID for thread tracking
+        process.env.LANGCHAIN_SESSION_ID = threadId;
+      }
+      
+      try {
+        // Use runName attribute and metadata to improve LangSmith visibility
+        const result = await chain.invoke(promptVariables, {
+          runName: `JoyBot-${functionName}`,
+          tags: ["joy-volunteer-matching", functionName],
+          // Include the threadId in metadata
+          metadata: {
+            function: functionName,
+            thread_id: threadId
+          }
+        });
+        
+        const duration = Date.now() - startTime;
+        console.log(`✅ ${functionName} completed in ${duration}ms via LangChain`);
+        
+        return result;
+      } finally {
+        // Clean up thread ID
+        if (threadId) {
+          delete process.env.LANGCHAIN_SESSION_ID;
         }
-      });
-
-      const duration = Date.now() - startTime;
-      console.log(
-        `✅ ${functionName} completed in ${duration}ms via LangChain`,
-      );
-
-      return result as string;
+      }
     } catch (error) {
       console.error(
         `❌ ${functionName} failed with LangChain:`,
@@ -299,16 +340,15 @@ export class ClaudeService {
     error?: any,
   ): void {
     const duration = Date.now() - startTime;
-    const userId = inputs.userId || "anonymous";
     const cached = inputs.cached || false;
 
     if (success) {
       console.log(
-        `✅ ${functionName} completed in ${duration}ms for user ${userId} ${cached ? "(cached)" : ""}`,
+        `✅ ${functionName} completed in ${duration}ms ${cached ? "(cached)" : ""}`,
       );
     } else {
       console.error(
-        `❌ ${functionName} failed after ${duration}ms for user ${userId}: ${error}`,
+        `❌ ${functionName} failed after ${duration}ms: ${error}`,
       );
     }
   }
@@ -369,10 +409,17 @@ Remember: ONLY provide the English translation, nothing else.`;
       { text, userId, model: this.FAST_MODEL },
       async () => {
         const prompt = promptTemplate.replace("{text}", text);
+        
+        // Generate a threadId for LangSmith if we have a userId
+        const threadId = userId !== "anonymous" ? `user-${userId}` : undefined;
+        
+        // Call Claude API directly
         const response = await this.client.messages.create({
           model: this.FAST_MODEL, // Use faster model for translation
           max_tokens: 1024,
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: prompt }]
+          // Don't add custom metadata to Claude API calls
+          // We're using process.env.LANGCHAIN_TRACING_THREAD_ID in trackWithLangSmith
         });
 
         if (response.content[0].type === "text") {
@@ -463,11 +510,14 @@ Remember: ONLY provide the translation in {destinationLang}, nothing else.`;
           .replace("{text}", text)
           .replace(/{sourceLang}/g, sourceLang)
           .replace(/{destinationLang}/g, destinationLang);
+        
+        // Generate a threadId for LangSmith if we have a userId
+        const threadId = userId !== "anonymous" ? `user-${userId}` : undefined;
 
         const response = await this.client.messages.create({
           model: this.FAST_MODEL, // Use faster model for translation
           max_tokens: 1024,
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: prompt }]
         });
 
         if (response.content[0].type === "text") {
@@ -532,10 +582,14 @@ Remember: ONLY provide the translation in {destinationLang}, nothing else.`;
       { text, userId, model: this.FAST_MODEL },
       async () => {
         const prompt = promptTemplate.replace("{text}", text);
+        
+        // Generate a threadId for LangSmith if we have a userId
+        const threadId = userId !== "anonymous" ? `user-${userId}` : undefined;
+        
         const response = await this.client.messages.create({
           model: this.FAST_MODEL, // Use faster model for search terms
           max_tokens: 1024,
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: prompt }]
         });
 
         if (response.content[0].type === "text") {
@@ -658,10 +712,13 @@ Keep your response concise but friendly.`;
       "generateRecommendationResponse",
       { message, tasks: simplifiedTasks, userId, model: this.FAST_MODEL },
       async () => {
+        // Generate a threadId for LangSmith if we have a userId
+        const threadId = userId !== "anonymous" ? `user-${userId}` : undefined;
+        
         const response = await this.client.messages.create({
           model: this.FAST_MODEL, // Use faster model for recommendations
           max_tokens: 800, // Reduced token limit for faster generation
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: prompt }]
         });
 
         if (response.content[0].type === "text") {
@@ -721,10 +778,13 @@ Make the response conversational and natural, focused on gathering more informat
       "generateNoMatchesResponse",
       { message, userId, model: this.FAST_MODEL },
       async () => {
+        // Generate a threadId for LangSmith if we have a userId
+        const threadId = userId !== "anonymous" ? `user-${userId}` : undefined;
+        
         const response = await this.client.messages.create({
           model: this.FAST_MODEL, // Use faster model for these simple responses
           max_tokens: 600, // Reduced token limit for faster generation
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: prompt }]
         });
 
         if (response.content[0].type === "text") {
