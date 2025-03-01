@@ -230,13 +230,19 @@ export class ClaudeService {
     
     // If we have a userId, set it as the session ID for thread tracking
     const userId = inputs.userId;
+    let threadId = undefined;
+    
     if (userId && userId !== "anonymous") {
-      process.env.LANGCHAIN_SESSION_ID = `user-${userId}`;
+      threadId = `user-${userId}`;
+      process.env.LANGCHAIN_SESSION_ID = threadId;
+      console.log(`[THREAD DEBUG] Setting thread ID: ${threadId} for user: ${userId}`);
+    } else {
+      console.log(`[THREAD DEBUG] No valid userId provided: ${userId}`);
     }
 
     // Debug log
     if (this.langsmith) {
-      console.log(`🔍 Tracking run '${runName}'${userId ? ` for user ${userId}` : ''} via LangSmith`);
+      console.log(`🔍 Tracking run '${runName}'${threadId ? ` with thread ID ${threadId}` : ''} via LangSmith`);
     }
 
     try {
@@ -293,10 +299,16 @@ export class ClaudeService {
       const userId = promptVariables.userId;
       let threadId = undefined;
       
+      console.log(`[THREAD DEBUG] LangChain call - userId in promptVariables:`, userId);
+      console.log(`[THREAD DEBUG] LangChain call - full promptVariables:`, JSON.stringify(promptVariables));
+      
       if (userId && userId !== "anonymous") {
         threadId = `user-${userId}`;
         // Set the session ID for thread tracking
         process.env.LANGCHAIN_SESSION_ID = threadId;
+        console.log(`[THREAD DEBUG] LangChain - Setting thread ID: ${threadId} for user: ${userId}`);
+      } else {
+        console.log(`[THREAD DEBUG] LangChain - No valid userId provided`);
       }
       
       try {
@@ -304,10 +316,14 @@ export class ClaudeService {
         const result = await chain.invoke(promptVariables, {
           runName: `JoyBot-${functionName}`,
           tags: ["joy-volunteer-matching", functionName],
-          // Include the threadId in metadata
+          // Include all important metadata for debugging and tracing
           metadata: {
             function: functionName,
-            thread_id: threadId
+            thread_id: threadId,
+            session_id: threadId,
+            conversation_id: threadId,
+            debug_userId: userId, // Include raw userId for debugging
+            timestamp: new Date().toISOString()
           }
         });
         
