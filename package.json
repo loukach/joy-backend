@@ -8,14 +8,14 @@
     "dev": "nodemon src/app.ts",
     "build": "tsc --noEmitOnError false && npm run copy-files",
     "build:js": "node scripts/build-js.js",
+    "build:render": "bash scripts/render-build.sh",
     "copy-files": "mkdir -p dist/cache",
     "test": "cross-env NODE_ENV=test jest",
     "test:watch": "cross-env NODE_ENV=test jest --watch",
     "test:integration": "cross-env NODE_ENV=development jest tests/integration",
     "test:unit": "cross-env NODE_ENV=development jest tests/unit",
     "lint": "eslint . --ext .ts",
-    "start:ts": "ts-node src/app.ts",
-    "render-build": "chmod +x scripts/render-build.sh && ./scripts/render-build.sh"
+    "start:ts": "ts-node src/app.ts"
   },
   "keywords": [
     "volunteer",

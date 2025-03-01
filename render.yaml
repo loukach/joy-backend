@@ -1,55 +1,55 @@
-services:
-
-  - type: web
-
-    name: joy-backend
-
-    env: node
-
-    plan: starter
-
-    buildCommand: chmod +x scripts/render-build.sh && ./scripts/render-build.sh
-
-    startCommand: npm start
-
-    envVars:
-
-      - key: NODE_ENV
-
-        value: production
-
-
-
-      - key: PORT
-
-        sync: false
-
-
-
-      - key: MONGODB_URI
-
-        sync: false
-
-
-
-      - key: CLAUDE_API_KEY
-
-        sync: false
-
-
-
-      - key: LANGSMITH_API_KEY
-
-        sync: false
-
-
-
-      - key: LANGSMITH_PROJECT
-
-        value: joy-volunteer-matching
-
-
-
-      - key: LANGCHAIN_TRACING_V2
-
+services:
+
+  - type: web
+
+    name: joy-backend
+
+    env: node
+
+    plan: starter
+
+    buildCommand: npm run build:render
+
+    startCommand: npm start
+
+    envVars:
+
+      - key: NODE_ENV
+
+        value: production
+
+
+
+      - key: PORT
+
+        sync: false
+
+
+
+      - key: MONGODB_URI
+
+        sync: false
+
+
+
+      - key: CLAUDE_API_KEY
+
+        sync: false
+
+
+
+      - key: LANGSMITH_API_KEY
+
+        sync: false
+
+
+
+      - key: LANGSMITH_PROJECT
+
+        value: joy-volunteer-matching
+
+
+
+      - key: LANGCHAIN_TRACING_V2
+
         value: "true"
