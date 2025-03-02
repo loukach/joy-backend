@@ -27,7 +27,7 @@ export class ConversationController {
       // Log the user message to the conversation history
       const conversation = await conversationService.logUserMessage(message, userId);
 
-      // Call the matching service to find matches for the message, passing userId for LangSmith tracking
+      // Call the matching service to find matches using function calling
       const botResponse = await matchingService.findMatches(message, language, userId);
       
       // Log the bot response to the conversation history

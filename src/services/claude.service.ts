@@ -27,6 +27,38 @@ export class ClaudeService {
   private langsmith: LangSmithClient | null = null;
   private langchainClient: ChatAnthropic | null = null;
   private cacheInterval: NodeJS.Timeout | null = null;
+  
+  // Function schemas for Claude function calling
+  private readonly functionSchemas = [
+    {
+      name: "search_tasks",
+      description: "Search for volunteer tasks matching user's interests",
+      parameters: {
+        type: "object",
+        properties: {
+          search_terms: {
+            type: "array",
+            items: { type: "string" },
+            description: "Keywords extracted from user's message"
+          }
+        },
+        required: ["search_terms"]
+      }
+    },
+    {
+      name: "translate_text",
+      description: "Translate text between languages",
+      parameters: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          source_language: { type: "string" },
+          target_language: { type: "string" }
+        },
+        required: ["text", "source_language", "target_language"]
+      }
+    }
+  ];
 
   constructor() {
     if (!process.env.CLAUDE_API_KEY) {
@@ -311,6 +343,155 @@ export class ClaudeService {
         `❌ ${functionName} failed after ${duration}ms for user ${userId}: ${error}`,
       );
     }
+  }
+
+  // FUNCTION HANDLERS
+
+  // Function handler for searching tasks
+  private async handleSearchTasks(args: { search_terms: string[] }): Promise<any[]> {
+    console.log(`🔍 Search tasks function called with terms:`, args.search_terms);
+    const searchTerms = args.search_terms.join(' ');
+    
+    // Reuse the existing task search logic from matchingService
+    return await this.performTaskSearch(searchTerms);
+  }
+
+  // Function handler for translating text
+  private async handleTranslateText(args: { 
+    text: string, 
+    source_language: string, 
+    target_language: string 
+  }): Promise<string> {
+    console.log(`🌐 Translate text function called from ${args.source_language} to ${args.target_language}`);
+    
+    // Use existing translation logic
+    if (args.source_language === 'en' && args.target_language === 'mt') {
+      return await this.translate(args.text, 'en', 'mt');
+    } else if (args.source_language !== 'en' && args.target_language === 'en') {
+      return await this.translateToEnglish(args.text);
+    } else {
+      return await this.translate(args.text, args.source_language, args.target_language);
+    }
+  }
+
+  // Function to perform task search
+  private async performTaskSearch(searchTerms: string): Promise<any[]> {
+    // Import TaskModel dynamically to avoid circular dependency
+    const { TaskModel } = require('../models/task');
+    
+    console.log(`Performing task search with terms: "${searchTerms}"`);
+
+    // First try direct text search
+    let tasks = await TaskModel.find(
+        { $text: { $search: searchTerms } },
+        { score: { $meta: "textScore" } }
+    )
+        .sort({ score: { $meta: "textScore" } })
+        .limit(10)
+        .exec();
+
+    console.log(`Text search found ${tasks.length} tasks`);
+
+    // If no results, try a more flexible search using individual terms
+    if (tasks.length === 0) {
+        const terms = searchTerms.split(' ').filter(term => term.length > 2);
+        console.log(`Trying flexible search with terms:`, terms);
+
+        tasks = await TaskModel.find({
+            $or: [
+                { tags: { $in: terms.map(term => new RegExp(term, 'i')) } },
+                { title: { $regex: terms.join('|'), $options: 'i' } },
+                { description: { $regex: terms.join('|'), $options: 'i' } }
+            ]
+        })
+            .limit(10)
+            .exec();
+
+        console.log(`Flexible search found ${tasks.length} tasks`);
+    }
+
+    return tasks;
+  }
+
+  // Main function to handle conversations with function calling
+  async handleConversation(messages: any[], language: string, userId?: string): Promise<string> {
+    const cacheKey = this.generateCacheKey("handleConversation", messages, language);
+    const cachedResponse = this.getCachedResponse(cacheKey);
+
+    if (cachedResponse) {
+      console.log(`🔄 Using cached conversation response`);
+      return cachedResponse;
+    }
+
+    return this.trackWithLangSmith(
+      "handleConversation",
+      { messages, language, userId, model: this.MODEL_NAME },
+      async () => {
+        // Initial call with function definitions
+        const response = await this.client.messages.create({
+          model: this.MODEL_NAME,
+          messages,
+          max_tokens: 1024,
+          tools: this.functionSchemas,
+          tool_choice: "auto"
+        });
+        
+        // Handle tool calls if present
+        if (response.content[0].type === 'tool_use') {
+          console.log(`🔧 Claude requested to use a tool: ${response.content[0].name}`);
+          
+          // Process the tool call
+          const toolCall = response.content[0];
+          const args = JSON.parse(toolCall.input);
+          
+          // Execute the appropriate tool handler
+          let toolResult;
+          if (toolCall.name === 'search_tasks') {
+            toolResult = await this.handleSearchTasks(args);
+          } else if (toolCall.name === 'translate_text') {
+            toolResult = await this.handleTranslateText(args);
+          } else {
+            throw new Error(`Unknown tool requested: ${toolCall.name}`);
+          }
+          
+          // Send the tool results back to Claude
+          const followupResponse = await this.client.messages.create({
+            model: this.MODEL_NAME,
+            messages: [
+              ...messages,
+              { role: "assistant", content: response.content },
+              { 
+                role: "user", 
+                content: [
+                  {
+                    type: "tool_result",
+                    tool_use_id: toolCall.id,
+                    content: JSON.stringify(toolResult)
+                  }
+                ]
+              }
+            ],
+            max_tokens: 1024
+          });
+          
+          // Get the final result
+          const result = followupResponse.content[0].type === 'text' 
+            ? followupResponse.content[0].text 
+            : JSON.stringify(followupResponse.content);
+          
+          this.setCachedResponse(cacheKey, result);
+          return result;
+        }
+        
+        // If no tool calls, just return the content
+        const result = response.content[0].type === 'text' 
+          ? response.content[0].text 
+          : JSON.stringify(response.content);
+        
+        this.setCachedResponse(cacheKey, result);
+        return result;
+      }
+    );
   }
 
   // CLAUDE API METHODS
